@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Simple BugTracker System - SAM Template
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+
+Resources:
+  # DynamoDB Table with Unified Schema
+  BugTrackerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "BugTracker-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+  # Simple Lambda Function
+  BugTrackerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "BugTrackerFunction-${Environment}"
+      CodeUri: ../lambdas/
+      Handler: bug_tracker_ingestion.lambda_handler
+      Runtime: python3.9
+      Timeout: 300
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref BugTrackerTable
+
+Outputs:
+  BugTrackerTableName:
+    Description: "Name of the BugTracker DynamoDB table"
+    Value: !Ref BugTrackerTable
+
+

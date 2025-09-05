@@ -1,0 +1,11 @@
+{
+  "Environment": "dev",
+  "SlackBotToken": "your_slack_bot_token_here",
+  "SlackChannelId": "your_slack_channel_id_here",
+  "ZendeskSubdomain": "your_zendesk_subdomain_here",
+  "ZendeskEmail": "your_zendesk_email_here",
+  "ZendeskApiToken": "your_zendesk_api_token_here",
+  "ShortcutApiToken": "your_shortcut_api_token_here"
+}
+
+

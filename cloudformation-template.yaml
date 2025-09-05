@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Unified BugTracker System - CloudFormation Template
+  Implements the unified DynamoDB schema for cross-system bug tracking
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  SlackBotToken:
+    Type: String
+    NoEcho: true
+    Description: Slack Bot Token for API access
+
+  SlackChannelId:
+    Type: String
+    Description: Slack Channel ID for monitoring
+
+  ZendeskSubdomain:
+    Type: String
+    Description: Zendesk subdomain
+
+  ZendeskEmail:
+    Type: String
+    Description: Zendesk email for API access
+
+  ZendeskApiToken:
+    Type: String
+    NoEcho: true
+    Description: Zendesk API Token
+
+  ShortcutApiToken:
+    Type: String
+    NoEcho: true
+    Description: Shortcut API Token
+
+Resources:
+  # DynamoDB Table with Unified Schema
+  BugTrackerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "BugTracker-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: priority
+          AttributeType: S
+        - AttributeName: state
+          AttributeType: S
+        - AttributeName: sourceSystem
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: priority-index
+          KeySchema:
+            - AttributeName: priority
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: state-index
+          KeySchema:
+            - AttributeName: state
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: source-index
+          KeySchema:
+            - AttributeName: sourceSystem
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: unified-bug-tracking
+
+  # IAM Role for Lambda Functions
+  BugTrackerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "BugTrackerLambdaRole-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BugTrackerDynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt BugTrackerTable.Arn
+                  - !Sub "${BugTrackerTable.Arn}/index/*"
+
+  # Lambda Function for Data Ingestion
+  BugTrackerIngestionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "BugTrackerIngestion-${Environment}"
+      Runtime: python3.9
+      Handler: bug_tracker_ingestion.lambda_handler
+      Role: !GetAtt BugTrackerLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('BugTracker Ingestion Function - Placeholder')
+              }
+      Environment:
+        Variables:
+          AWS_REGION: !Ref AWS::Region
+          DYNAMODB_TABLE: !Ref BugTrackerTable
+          SLACK_BOT_TOKEN: !Ref SlackBotToken
+          SLACK_CHANNEL_ID: !Ref SlackChannelId
+          ZENDESK_SUBDOMAIN: !Ref ZendeskSubdomain
+          ZENDESK_EMAIL: !Ref ZendeskEmail
+          ZENDESK_API_TOKEN: !Ref ZendeskApiToken
+          SHORTCUT_API_TOKEN: !Ref ShortcutApiToken
+      Timeout: 300
+
+  # CloudWatch Events Rule for Scheduled Ingestion
+  BugTrackerIngestionSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "BugTrackerIngestionSchedule-${Environment}"
+      Description: "Scheduled data ingestion for BugTracker"
+      ScheduleExpression: "rate(1 hour)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt BugTrackerIngestionFunction.Arn
+          Id: BugTrackerIngestionTarget
+
+  # Permission for CloudWatch Events to invoke Lambda
+  BugTrackerIngestionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BugTrackerIngestionFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt BugTrackerIngestionSchedule.Arn
+
+  # SNS Topic for Notifications
+  BugTrackerNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "BugTrackerNotifications-${Environment}"
+      DisplayName: !Sub "BugTracker Notifications - ${Environment}"
+
+  # CloudWatch Log Group for Lambda Functions
+  BugTrackerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/BugTracker-${Environment}"
+      RetentionInDays: 30
+
+Outputs:
+  BugTrackerTableName:
+    Description: "Name of the BugTracker DynamoDB table"
+    Value: !Ref BugTrackerTable
+    Export:
+      Name: !Sub "${AWS::StackName}-TableName"
+
+  BugTrackerTableArn:
+    Description: "ARN of the BugTracker DynamoDB table"
+    Value: !GetAtt BugTrackerTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-TableArn"
+
+  BugTrackerIngestionFunctionArn:
+    Description: "ARN of the BugTracker ingestion Lambda function"
+    Value: !GetAtt BugTrackerIngestionFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-IngestionFunctionArn"
+
+  BugTrackerNotificationTopicArn:
+    Description: "ARN of the BugTracker notification SNS topic"
+    Value: !Ref BugTrackerNotificationTopic
+    Export:
+      Name: !Sub "${AWS::StackName}-NotificationTopicArn"
+
+

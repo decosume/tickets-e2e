@@ -1,0 +1,169 @@
+.grafana-dashboard-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+  overflow: hidden;
+}
+
+.grafana-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 25px;
+  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.grafana-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.grafana-controls {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.time-range-selector {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.time-range-selector:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.time-range-selector option {
+  background: #333;
+  color: white;
+}
+
+.grafana-iframe-wrapper {
+  position: relative;
+  background: #f8fafc;
+}
+
+.grafana-iframe {
+  border: none;
+  border-radius: 0 0 12px 12px;
+  background: white;
+}
+
+.grafana-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f4f6;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.grafana-loading p {
+  color: #6b7280;
+  font-size: 16px;
+  margin: 0;
+}
+
+.grafana-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  color: #dc2626;
+}
+
+.grafana-error p {
+  margin-bottom: 15px;
+  font-size: 16px;
+}
+
+.grafana-error button {
+  padding: 10px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s ease;
+}
+
+.grafana-error button:hover {
+  background: #5a67d8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .grafana-header {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+  
+  .grafana-header h3 {
+    font-size: 1.3rem;
+  }
+  
+  .grafana-controls {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .time-range-selector {
+    width: 100%;
+    max-width: 200px;
+  }
+  
+  .grafana-iframe {
+    height: 400px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .grafana-header {
+    padding: 15px 20px;
+  }
+  
+  .grafana-header h3 {
+    font-size: 1.2rem;
+  }
+  
+  .grafana-iframe {
+    height: 350px !important;
+  }
+}
+
+
+

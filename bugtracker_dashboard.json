@@ -1,0 +1,453 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Unified BugTracker Dashboard",
+    "tags": ["bugtracker", "unified", "dynamodb", "support"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total Bugs Across All Systems",
+        "type": "stat",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "Select": "COUNT"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "basic",
+              "colorMode": "background"
+            },
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Bugs by Source System",
+        "type": "piechart",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "IndexName": "source-index",
+              "ProjectionExpression": "sourceSystem",
+              "Select": "COUNT"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              }
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "High Priority Bugs",
+        "type": "stat",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "IndexName": "priority-index",
+              "KeyConditionExpression": "priority = :priority",
+              "ExpressionAttributeValues": {
+                ":priority": "high"
+              },
+              "Select": "COUNT"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "displayMode": "basic"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 10
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "Bugs by State",
+        "type": "barchart",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "IndexName": "state-index",
+              "ProjectionExpression": "state",
+              "Select": "COUNT"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              }
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Recent Bugs Timeline",
+        "type": "timeseries",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "ProjectionExpression": "createdAt, sourceSystem",
+              "ScanIndexForward": false,
+              "Limit": 100
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              }
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 6,
+        "title": "Slack Messages",
+        "type": "stat",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "IndexName": "source-index",
+              "KeyConditionExpression": "sourceSystem = :source",
+              "ExpressionAttributeValues": {
+                ":source": "slack"
+              },
+              "Select": "COUNT"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "basic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 7,
+        "title": "Shortcut Stories",
+        "type": "stat",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "IndexName": "source-index",
+              "KeyConditionExpression": "sourceSystem = :source",
+              "ExpressionAttributeValues": {
+                ":source": "shortcut"
+              },
+              "Select": "COUNT"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "basic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        }
+      },
+      {
+        "id": 8,
+        "title": "Zendesk Tickets",
+        "type": "stat",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "IndexName": "source-index",
+              "KeyConditionExpression": "sourceSystem = :source",
+              "ExpressionAttributeValues": {
+                ":source": "zendesk"
+              },
+              "Select": "COUNT"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "basic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 9,
+        "title": "Recent Bug Details",
+        "type": "table",
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "dynamodb_query",
+            "query": {
+              "TableName": "BugTracker-dev",
+              "ProjectionExpression": "PK, SK, sourceSystem, createdAt, priority, state",
+              "ScanIndexForward": false,
+              "Limit": 20
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 24
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": "DynamoDB",
+          "definition": "dynamodb_query",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Source System",
+          "multi": true,
+          "name": "source_system",
+          "options": [],
+          "query": {
+            "TableName": "BugTracker-dev",
+            "IndexName": "source-index",
+            "ProjectionExpression": "sourceSystem",
+            "Select": "COUNT"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          "datasource": "DynamoDB",
+          "definition": "dynamodb_query",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Priority",
+          "multi": true,
+          "name": "priority",
+          "options": [],
+          "query": {
+            "TableName": "BugTracker-dev",
+            "IndexName": "priority-index",
+            "ProjectionExpression": "priority",
+            "Select": "COUNT"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 0,
+          "type": "query"
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 0,
+    "links": [],
+    "liveNow": false,
+    "schemaVersion": 30,
+    "style": "dark",
+    "tags": ["bugtracker", "unified", "dynamodb"],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "Unified BugTracker Dashboard",
+    "uid": "bugtracker-unified",
+    "version": 1
+  }
+}
+
+

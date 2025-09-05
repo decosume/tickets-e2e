@@ -1,0 +1,288 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  tickets-e2e-service
+  Unified BugTracker System - API Gateway + Lambda + DynamoDB
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 300
+    Runtime: python3.9
+    Environment:
+      Variables:
+        AWS_REGION: !Ref AWS::Region
+        DYNAMODB_TABLE: !Ref BugTrackerTable
+    Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Ref BugTrackerTable
+      - DynamoDBReadPolicy:
+          TableName: !Ref BugTrackerTable
+
+Parameters:
+  environment:
+    Type: String
+    Default: dev
+    Description: Environment name (dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+  firstRun:
+    Type: String
+    Default: 'false'
+  domainName:
+    Type: String
+  altDomainName:
+    Type: String
+  deploymentRole:
+    Type: String
+  lambdaRole:
+    Type: String
+  securityGroupIds:
+    Type: 'List<AWS::EC2::SecurityGroup::Id>'
+  subnetIds:
+    Type: 'List<AWS::EC2::Subnet::Id>'
+  dbSecret:
+    Type: String
+  slackBotToken:
+    Type: String
+    NoEcho: true
+  slackChannelId:
+    Type: String
+  zendeskSubdomain:
+    Type: String
+  zendeskEmail:
+    Type: String
+  zendeskApiToken:
+    Type: String
+    NoEcho: true
+  shortcutApiToken:
+    Type: String
+    NoEcho: true
+  alarmSnsTopic: 
+    Type: String
+  okSnsTopic:
+    Type: String
+
+Conditions:
+  notFirstRun: !Equals [!Ref firstRun, 'false']
+
+Resources:
+  # DynamoDB Table with Unified Schema
+  BugTrackerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "BugTracker-${environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: priority
+          AttributeType: S
+        - AttributeName: state
+          AttributeType: S
+        - AttributeName: sourceSystem
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: priority-index
+          KeySchema:
+            - AttributeName: priority
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: state-index
+          KeySchema:
+            - AttributeName: state
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: source-index
+          KeySchema:
+            - AttributeName: sourceSystem
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref environment
+        - Key: Purpose
+          Value: unified-bug-tracking
+
+  LambdaAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmDescription: "Alarm if lambda function fails"
+      Threshold: 5
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Statistic: 'Sum'
+      Period: 600
+      EvaluationPeriods: 1
+      Unit: Count
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref BugTrackerIngestionFunction
+      AlarmActions:
+        - !Ref alarmSnsTopic
+      OKActions:
+        - !Ref okSnsTopic
+      Tags:
+        - Key: Name
+          Value: !Ref BugTrackerIngestionFunction
+        - Key: environment
+          Value: !Ref environment
+
+  # Lambda Function for Data Ingestion
+  BugTrackerIngestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${environment}_bug-tracker-ingestion"
+      Description: Ingests bug data from Slack, Zendesk, and Shortcut
+      MemorySize: 1024
+      CodeUri: src/
+      Handler: bug_tracker_ingestion.lambda_handler
+      AutoPublishAlias: current
+      DeploymentPreference:
+        Type: AllAtOnce
+        Role: !Ref deploymentRole
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Ref slackBotToken
+          SLACK_CHANNEL_ID: !Ref slackChannelId
+          ZENDESK_SUBDOMAIN: !Ref zendeskSubdomain
+          ZENDESK_EMAIL: !Ref zendeskEmail
+          ZENDESK_API_TOKEN: !Ref zendeskApiToken
+          SHORTCUT_API_TOKEN: !Ref shortcutApiToken
+      Role: !Ref lambdaRole
+      VpcConfig:
+        SecurityGroupIds: !Ref securityGroupIds
+        SubnetIds: !Ref subnetIds
+      Events:
+        ScheduledIngestion:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Name: !Sub "BugTrackerIngestion-${environment}"
+            Description: "Scheduled data ingestion for BugTracker"
+            Enabled: true
+
+  # Lambda Function for Manual Bug Linking
+  BugTrackerLinkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${environment}_bug-tracker-linker"
+      Description: Links related bugs across systems
+      MemorySize: 512
+      CodeUri: src/
+      Handler: bug_tracker_linker.lambda_handler
+      AutoPublishAlias: current
+      DeploymentPreference:
+        Type: AllAtOnce
+        Role: !Ref deploymentRole
+      Role: !Ref lambdaRole
+      VpcConfig:
+        SecurityGroupIds: !Ref securityGroupIds
+        SubnetIds: !Ref subnetIds
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /link-bugs
+            Method: post
+            RestApiId:
+              Ref: BugTrackerApiGateway
+
+  # Lambda Function for Querying Bugs
+  BugTrackerQueryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${environment}_bug-tracker-query"
+      Description: Queries bug data from DynamoDB
+      MemorySize: 512
+      CodeUri: src/
+      Handler: bug_tracker_query.lambda_handler
+      AutoPublishAlias: current
+      DeploymentPreference:
+        Type: AllAtOnce
+        Role: !Ref deploymentRole
+      Role: !Ref lambdaRole
+      VpcConfig:
+        SecurityGroupIds: !Ref securityGroupIds
+        SubnetIds: !Ref subnetIds
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /query-bugs
+            Method: get
+            RestApiId:
+              Ref: BugTrackerApiGateway
+
+  # API Gateway
+  BugTrackerApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${environment}_BugTrackerApi"
+      MethodSettings:
+        - HttpMethod: '*'
+          ResourcePath: '/*'
+          ThrottlingBurstLimit: 100
+          ThrottlingRateLimit: 10      
+      StageName: !Ref environment
+      EndpointConfiguration: REGIONAL
+      Cors:
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+      GatewayResponses:
+        DEFAULT_4xx:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'*'"
+
+  # Enabled following first deploy
+  BugTrackerApiGatewayMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    DependsOn: BugTrackerApiGatewayStage
+    Properties:
+      BasePath: bug-tracker
+      DomainName: !Ref domainName
+      RestApiId: !Ref BugTrackerApiGateway
+      Stage: !Ref environment
+
+Outputs:
+  BugTrackerApi:
+    Description: 'API Gateway endpoint URL for BugTracker service'
+    Value: !Sub 'https://${BugTrackerApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${environment}/'
+  BugTrackerIngestionFunction:
+    Description: 'BugTracker Ingestion Lambda Function ARN'
+    Value: !GetAtt BugTrackerIngestionFunction.Arn
+  BugTrackerTableName:
+    Description: "Name of the BugTracker DynamoDB table"
+    Value: !Ref BugTrackerTable
+    Export:
+      Name: !Sub "${AWS::StackName}-TableName"
+  BugTrackerTableArn:
+    Description: "ARN of the BugTracker DynamoDB table"
+    Value: !GetAtt BugTrackerTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-TableArn"

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unified BugTracker Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --dark-color: #343a40;
+            --light-color: #f8f9fa;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .dashboard-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            padding: 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .header h1 {
+            color: var(--dark-color);
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: var(--secondary-color);
+            font-size: 1.1rem;
+        }
+
+        .stats-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stats-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .stats-label {
+            font-size: 1rem;
+            color: var(--secondary-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .source-slack { color: #4A154B; }
+        .source-shortcut { color: #FF6B35; }
+        .source-zendesk { color: #03363D; }
+
+        .priority-high { color: var(--danger-color); }
+        .priority-medium { color: var(--warning-color); }
+        .priority-low { color: var(--success-color); }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .filters {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .bug-list {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .bug-item {
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .bug-item:hover {
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transform: translateX(5px);
+        }
+
+        .bug-title {
+            font-weight: 600;
+            color: var(--dark-color);
+            margin-bottom: 5px;
+        }
+
+        .bug-meta {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+        }
+
+        .badge-custom {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--secondary-color);
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            transform: rotate(180deg);
+            background: var(--info-color);
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                margin: 10px;
+                padding: 20px;
+            }
+            
+            .stats-number {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fas fa-bug"></i> Unified BugTracker Dashboard</h1>
+            <p>Real-time insights across Slack, Shortcut, and Zendesk</p>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="row" id="statsCards">
+            <div class="col-md-3 col-sm-6">
+                <div class="stats-card">
+                    <div class="stats-number" id="totalBugs">-</div>
+                    <div class="stats-label">Total Bugs</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="stats-card">
+                    <div class="stats-number source-slack" id="slackBugs">-</div>
+                    <div class="stats-label">Slack Messages</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="stats-card">
+                    <div class="stats-number source-shortcut" id="shortcutBugs">-</div>
+                    <div class="stats-label">Shortcut Stories</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="stats-card">
+                    <div class="stats-number source-zendesk" id="zendeskBugs">-</div>
+                    <div class="stats-label">Zendesk Tickets</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-chart-pie"></i> Bugs by Source System</h5>
+                    <canvas id="sourceChart"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-chart-bar"></i> Bugs by Priority</h5>
+                    <canvas id="priorityChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <h5><i class="fas fa-filter"></i> Filters</h5>
+            <div class="row">
+                <div class="col-md-3">
+                    <label class="form-label">Source System</label>
+                    <select class="form-select" id="sourceFilter">
+                        <option value="">All Sources</option>
+                        <option value="slack">Slack</option>
+                        <option value="shortcut">Shortcut</option>
+                        <option value="zendesk">Zendesk</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Priority</label>
+                    <select class="form-select" id="priorityFilter">
+                        <option value="">All Priorities</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">State</label>
+                    <select class="form-select" id="stateFilter">
+                        <option value="">All States</option>
+                        <option value="open">Open</option>
+                        <option value="closed">Closed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Search</label>
+                    <input type="text" class="form-control" id="searchInput" placeholder="Search bugs...">
+                </div>
+            </div>
+        </div>
+
+        <!-- Bug List -->
+        <div class="bug-list">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5><i class="fas fa-list"></i> Recent Bugs</h5>
+                <span class="badge bg-primary" id="bugCount">0 bugs</span>
+            </div>
+            <div id="bugList">
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i> Loading bugs...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <button class="refresh-btn" onclick="loadDashboard()">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let sourceChart, priorityChart;
+        let currentFilters = {};
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboard();
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('sourceFilter').addEventListener('change', filterBugs);
+            document.getElementById('priorityFilter').addEventListener('change', filterBugs);
+            document.getElementById('stateFilter').addEventListener('change', filterBugs);
+            document.getElementById('searchInput').addEventListener('input', debounce(filterBugs, 300));
+        }
+
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Load dashboard data
+        async function loadDashboard() {
+            try {
+                // Load statistics
+                await loadStats();
+                
+                // Load charts
+                await loadCharts();
+                
+                // Load bug list
+                await loadBugList();
+                
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                showError('Failed to load dashboard data');
+            }
+        }
+
+        // Load statistics
+        async function loadStats() {
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
+            
+            document.getElementById('totalBugs').textContent = stats.total;
+            document.getElementById('slackBugs').textContent = stats.bySource.slack;
+            document.getElementById('shortcutBugs').textContent = stats.bySource.shortcut;
+            document.getElementById('zendeskBugs').textContent = stats.bySource.zendesk;
+        }
+
+        // Load charts
+        async function loadCharts() {
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
+            
+            // Source chart
+            const sourceCtx = document.getElementById('sourceChart').getContext('2d');
+            if (sourceChart) sourceChart.destroy();
+            sourceChart = new Chart(sourceCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Slack', 'Shortcut', 'Zendesk'],
+                    datasets: [{
+                        data: [stats.bySource.slack, stats.bySource.shortcut, stats.bySource.zendesk],
+                        backgroundColor: ['#4A154B', '#FF6B35', '#03363D'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Priority chart
+            const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+            if (priorityChart) priorityChart.destroy();
+            priorityChart = new Chart(priorityCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['High', 'Medium', 'Low', 'Unknown'],
+                    datasets: [{
+                        label: 'Bugs by Priority',
+                        data: [stats.byPriority.high, stats.byPriority.medium, stats.byPriority.low, stats.byPriority.unknown],
+                        backgroundColor: ['#dc3545', '#ffc107', '#28a745', '#6c757d'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load bug list
+        async function loadBugList() {
+            const bugList = document.getElementById('bugList');
+            bugList.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading bugs...</div>';
+
+            try {
+                const params = new URLSearchParams();
+                if (currentFilters.sourceSystem) params.append('sourceSystem', currentFilters.sourceSystem);
+                if (currentFilters.priority) params.append('priority', currentFilters.priority);
+                if (currentFilters.state) params.append('state', currentFilters.state);
+                if (currentFilters.limit) params.append('limit', currentFilters.limit);
+
+                const response = await fetch(`/api/bugs?${params.toString()}`);
+                const data = await response.json();
+
+                displayBugs(data.bugs);
+                document.getElementById('bugCount').textContent = `${data.count} bugs`;
+
+            } catch (error) {
+                console.error('Error loading bugs:', error);
+                bugList.innerHTML = '<div class="error">Failed to load bugs</div>';
+            }
+        }
+
+        // Display bugs
+        function displayBugs(bugs) {
+            const bugList = document.getElementById('bugList');
+            
+            if (bugs.length === 0) {
+                bugList.innerHTML = '<div class="text-center text-muted">No bugs found</div>';
+                return;
+            }
+
+            const bugsHtml = bugs.map(bug => `
+                <div class="bug-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <div class="bug-title">${escapeHtml(bug.name)}</div>
+                            <div class="bug-meta">
+                                <span class="badge badge-custom bg-secondary me-2">${bug.sourceSystem}</span>
+                                <span class="badge badge-custom priority-${bug.priority.toLowerCase()} me-2">${bug.priority}</span>
+                                <span class="badge badge-custom bg-info me-2">${bug.state}</span>
+                                <small class="text-muted">Created: ${formatDate(bug.createdAt)}</small>
+                            </div>
+                            ${bug.description ? `<div class="mt-2 text-muted">${escapeHtml(bug.description.substring(0, 150))}${bug.description.length > 150 ? '...' : ''}</div>` : ''}
+                        </div>
+                        <div class="ms-3">
+                            <span class="badge bg-primary">${bug.id}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            bugList.innerHTML = bugsHtml;
+        }
+
+        // Filter bugs
+        async function filterBugs() {
+            currentFilters = {
+                sourceSystem: document.getElementById('sourceFilter').value,
+                priority: document.getElementById('priorityFilter').value,
+                state: document.getElementById('stateFilter').value,
+                query: document.getElementById('searchInput').value,
+                limit: 50
+            };
+
+            if (currentFilters.query) {
+                // Use search endpoint
+                try {
+                    const response = await fetch('/api/bugs/search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(currentFilters)
+                    });
+                    const data = await response.json();
+                    displayBugs(data.bugs);
+                    document.getElementById('bugCount').textContent = `${data.count} bugs`;
+                } catch (error) {
+                    console.error('Error searching bugs:', error);
+                    showError('Failed to search bugs');
+                }
+            } else {
+                // Use regular endpoint
+                await loadBugList();
+            }
+        }
+
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown';
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.querySelector('.dashboard-container').insertBefore(errorDiv, document.querySelector('.header').nextSibling);
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 5000);
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+</html>
+
+
