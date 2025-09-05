@@ -11,13 +11,7 @@ Globals:
     Runtime: python3.9
     Environment:
       Variables:
-        AWS_REGION: !Ref AWS::Region
         DYNAMODB_TABLE: !Ref BugTrackerTable
-    Policies:
-      - DynamoDBCrudPolicy:
-          TableName: !Ref BugTrackerTable
-      - DynamoDBReadPolicy:
-          TableName: !Ref BugTrackerTable
 
 Parameters:
   environment:
@@ -64,9 +58,6 @@ Parameters:
     Type: String
   okSnsTopic:
     Type: String
-
-Conditions:
-  notFirstRun: !Equals [!Ref firstRun, 'false']
 
 Resources:
   # DynamoDB Table with Unified Schema
@@ -176,6 +167,9 @@ Resources:
       VpcConfig:
         SecurityGroupIds: !Ref securityGroupIds
         SubnetIds: !Ref subnetIds
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BugTrackerTable
       Events:
         ScheduledIngestion:
           Type: Schedule
@@ -202,6 +196,9 @@ Resources:
       VpcConfig:
         SecurityGroupIds: !Ref securityGroupIds
         SubnetIds: !Ref subnetIds
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BugTrackerTable
       Events:
         ApiEvent:
           Type: Api
@@ -228,6 +225,9 @@ Resources:
       VpcConfig:
         SecurityGroupIds: !Ref securityGroupIds
         SubnetIds: !Ref subnetIds
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref BugTrackerTable
       Events:
         ApiEvent:
           Type: Api

@@ -1,7 +1,7 @@
 import logging
-from castifi.service.bug_tracker_ingestion import BugTrackerIngestion
-from castifi.service.bug_tracker_query import BugTrackerQuery
-from castifi.service.bug_tracker_linker import BugTrackerLinker
+from bug_tracker_ingestion import BugTrackerIngestion
+from bug_tracker_query import BugTrackerQuery
+from bug_tracker_linker import BugTrackerLinker
 
 logger = logging.getLogger()
 
