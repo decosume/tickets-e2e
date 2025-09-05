@@ -10,6 +10,22 @@ The repository follows the `casting-deployments` microservice pattern.
 
 **Use in combination with the `casting-deployments` repository.**
 
+## 🌍 Environments
+
+This service supports two environments:
+
+### **`dev` Environment**
+- **Purpose**: Existing dashboard and development
+- **Table**: `BugTracker-dev`
+- **Dashboard**: Current dashboard continues to work
+- **Use Case**: Development and existing workflows
+
+### **`evt-bugtracker` Environment**
+- **Purpose**: Internal bug tracking system
+- **Table**: `BugTracker-evt-bugtracker`
+- **Dashboard**: New internal dashboard (when created)
+- **Use Case**: Internal bug tracking and analysis
+
 ## File Mapping
 
 - `src/app.py` - Main Lambda handler following the casting pattern
@@ -50,7 +66,10 @@ The repository follows the `casting-deployments` microservice pattern.
 This service is deployed using the `casting-deployments` framework:
 
 ```bash
-# From casting-deployments directory
+# Deploy to dev environment (existing dashboard)
+python3 cmd --env dev --lambdas tickets-e2e-service deploy
+
+# Deploy to evt-bugtracker environment (new internal environment)
 python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service deploy
 ```
 
@@ -71,17 +90,26 @@ tickets-e2e-service:
 ## Testing
 
 ```bash
-# Run unit tests
+# Run unit tests (dev environment)
+python3 cmd --env dev --lambdas tickets-e2e-service utest
+
+# Run unit tests (evt-bugtracker environment)
 python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service utest
 
-# Run integration tests
+# Run integration tests (dev environment)
+python3 cmd --env dev --lambdas tickets-e2e-service itest
+
+# Run integration tests (evt-bugtracker environment)
 python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service itest
 ```
 
 ## Local Development
 
 ```bash
-# Start local API Gateway
+# Start local API Gateway (dev environment)
+python3 cmd --env dev --lambdas tickets-e2e-service start
+
+# Start local API Gateway (evt-bugtracker environment)
 python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service start
 ```
 
