@@ -51,7 +51,7 @@ This service is deployed using the `casting-deployments` framework:
 
 ```bash
 # From casting-deployments directory
-python3 cmd --env qa --lambdas tickets-e2e-service deploy
+python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service deploy
 ```
 
 ## Environment Configuration
@@ -72,17 +72,17 @@ tickets-e2e-service:
 
 ```bash
 # Run unit tests
-python3 cmd --env qa --lambdas tickets-e2e-service utest
+python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service utest
 
 # Run integration tests
-python3 cmd --env qa --lambdas tickets-e2e-service itest
+python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service itest
 ```
 
 ## Local Development
 
 ```bash
 # Start local API Gateway
-python3 cmd --env qa --lambdas tickets-e2e-service start
+python3 cmd --env evt-bugtracker --lambdas tickets-e2e-service start
 ```
 
 ## Monitoring

@@ -16,9 +16,11 @@ Globals:
 Parameters:
   environment:
     Type: String
-    Default: dev
-    Description: Environment name (dev, staging, prod)
+    Default: evt-bugtracker
+    Description: Environment name (evt-bugtracker, internal, dev, staging, prod)
     AllowedValues:
+      - evt-bugtracker
+      - internal
       - dev
       - staging
       - prod
