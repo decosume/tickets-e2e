@@ -21,3 +21,4 @@ class DatabaseException(BugTrackerException):
 class ExternalApiException(BugTrackerException):
     """Exception for external API errors"""
     pass
+

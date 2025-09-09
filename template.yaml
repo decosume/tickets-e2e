@@ -26,10 +26,6 @@ Parameters:
   firstRun:
     Type: String
     Default: 'false'
-  domainName:
-    Type: String
-  altDomainName:
-    Type: String
   deploymentRole:
     Type: String
   lambdaRole:
@@ -246,34 +242,30 @@ Resources:
       MethodSettings:
         - HttpMethod: '*'
           ResourcePath: '/*'
-          ThrottlingBurstLimit: 100
-          ThrottlingRateLimit: 10      
+          ThrottlingBurstLimit: 500
+          ThrottlingRateLimit: 100      
       StageName: !Ref environment
       EndpointConfiguration: REGIONAL
       Cors:
-        AllowHeaders: "'*'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'*'"
+        MaxAge: "'600'"
       GatewayResponses:
         DEFAULT_4xx:
           ResponseParameters:
             Headers:
               Access-Control-Allow-Origin: "'*'"
-              Access-Control-Allow-Headers: "'*'"
-
-  # Enabled following first deploy
-  BugTrackerApiGatewayMapping:
-    Type: AWS::ApiGateway::BasePathMapping
-    DependsOn: BugTrackerApiGatewayStage
-    Properties:
-      BasePath: bug-tracker
-      DomainName: !Ref domainName
-      RestApiId: !Ref BugTrackerApiGateway
-      Stage: !Ref environment
+              Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        DEFAULT_5xx:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
 
 Outputs:
-  BugTrackerApi:
-    Description: 'API Gateway endpoint URL for BugTracker service'
-    Value: !Sub 'https://${BugTrackerApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${environment}/'
   BugTrackerIngestionFunction:
     Description: 'BugTracker Ingestion Lambda Function ARN'
     Value: !GetAtt BugTrackerIngestionFunction.Arn
@@ -287,3 +279,8 @@ Outputs:
     Value: !GetAtt BugTrackerTable.Arn
     Export:
       Name: !Sub "${AWS::StackName}-TableArn"
+  BugTrackerApiUrl:
+    Description: "API Gateway endpoint URL for BugTracker service"
+    Value: !Sub "https://${BugTrackerApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${environment}/"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"

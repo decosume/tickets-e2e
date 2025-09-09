@@ -7,16 +7,11 @@ Description: >
 Globals:
   Function:
     Timeout: 300
-    Runtime: python3.9
+    Runtime: python3.8
     Environment:
       Variables:
         AWS_REGION: !Ref AWS::Region
         DYNAMODB_TABLE: !Ref BugTrackerTable
-    Policies:
-      - DynamoDBCrudPolicy:
-          TableName: !Ref BugTrackerTable
-      - DynamoDBReadPolicy:
-          TableName: !Ref BugTrackerTable
 
 Parameters:
   Environment:
@@ -27,6 +22,7 @@ Parameters:
       - dev
       - staging
       - prod
+      - evt-bugtracker
 
   SlackBotToken:
     Type: String

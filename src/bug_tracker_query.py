@@ -3,6 +3,7 @@ import boto3
 import json
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 # Configure logging
 logger = logging.getLogger()
@@ -81,8 +82,9 @@ class BugTrackerQuery:
     def get_bugs_by_state(self, state, time_range=None):
         """Get all bugs by state using GSI"""
         try:
-            key_condition = 'state = :state'
+            key_condition = '#st = :state'
             expression_values = {':state': state}
+            expression_names = {'#st': 'state'}
             
             if time_range:
                 # Add time range filter if provided
@@ -97,7 +99,8 @@ class BugTrackerQuery:
             response = self.table.query(
                 IndexName='state-index',
                 KeyConditionExpression=key_condition,
-                ExpressionAttributeValues=expression_values
+                ExpressionAttributeValues=expression_values,
+                ExpressionAttributeNames=expression_names
             )
             
             return {
@@ -152,49 +155,86 @@ class BugTrackerQuery:
                 'items': []
             }
     
-    def get_bugs_summary(self, time_range=None):
-        """Get summary statistics for all bugs"""
+    def get_bugs_summary(self, time_range=None, source_system=None):
+        """Get summary statistics for all bugs, optionally filtered by source system"""
         try:
-            # Get counts by priority
-            priorities = ['High', 'Medium', 'Low', 'Critical', 'Unknown']
-            priority_counts = {}
-            
-            for priority in priorities:
-                result = self.get_bugs_by_priority(priority, time_range)
-                if result['success']:
-                    priority_counts[priority] = result['count']
-                else:
-                    priority_counts[priority] = 0
-            
-            # Get counts by state
-            states = ['open', 'closed', 'pending', 'Ready for Dev', 'In Progress', 'Ready for QA', 'Blocked']
-            state_counts = {}
-            
-            for state in states:
-                result = self.get_bugs_by_state(state, time_range)
-                if result['success']:
-                    state_counts[state] = result['count']
-                else:
-                    state_counts[state] = 0
-            
-            # Get counts by source
-            sources = ['slack', 'zendesk', 'shortcut']
-            source_counts = {}
-            
-            for source in sources:
-                result = self.get_bugs_by_source(source, time_range)
-                if result['success']:
-                    source_counts[source] = result['count']
-                else:
-                    source_counts[source] = 0
-            
-            # Calculate total bugs
-            total_bugs = sum(priority_counts.values())
+            if source_system:
+                # Get bugs from specific source and count by priority/state
+                source_result = self.get_bugs_by_source(source_system, time_range)
+                if not source_result['success']:
+                    return source_result
+                
+                bugs = source_result['items']
+                
+                # Count by priority
+                priorities = ['High', 'Medium', 'Low', 'Critical', 'Unknown']
+                priority_counts = {priority: 0 for priority in priorities}
+                
+                # Count by state
+                states = ['open', 'closed', 'pending', 'Ready for Dev', 'In Progress', 'Ready for QA', 'Blocked']
+                state_counts = {state: 0 for state in states}
+                
+                # Count by source (will be only one source)
+                sources = ['slack', 'zendesk', 'shortcut']
+                source_counts = {source: 0 for source in sources}
+                source_counts[source_system] = len(bugs)
+                
+                # Count bugs by priority and state
+                for bug in bugs:
+                    priority = bug.get('priority', 'Unknown')
+                    if priority in priority_counts:
+                        priority_counts[priority] += 1
+                    else:
+                        priority_counts['Unknown'] += 1
+                    
+                    state = bug.get('state', 'open')
+                    if state in state_counts:
+                        state_counts[state] += 1
+                    else:
+                        state_counts['open'] += 1
+                
+                total_bugs = len(bugs)
+            else:
+                # Get counts by priority
+                priorities = ['High', 'Medium', 'Low', 'Critical', 'Unknown']
+                priority_counts = {}
+                
+                for priority in priorities:
+                    result = self.get_bugs_by_priority(priority, time_range)
+                    if result['success']:
+                        priority_counts[priority] = result['count']
+                    else:
+                        priority_counts[priority] = 0
+                
+                # Get counts by state
+                states = ['open', 'closed', 'pending', 'Ready for Dev', 'In Progress', 'Ready for QA', 'Blocked']
+                state_counts = {}
+                
+                for state in states:
+                    result = self.get_bugs_by_state(state, time_range)
+                    if result['success']:
+                        state_counts[state] = result['count']
+                    else:
+                        state_counts[state] = 0
+                
+                # Get counts by source
+                sources = ['slack', 'zendesk', 'shortcut']
+                source_counts = {}
+                
+                for source in sources:
+                    result = self.get_bugs_by_source(source, time_range)
+                    if result['success']:
+                        source_counts[source] = result['count']
+                    else:
+                        source_counts[source] = 0
+                
+                # Calculate total bugs
+                total_bugs = sum(priority_counts.values())
             
             return {
                 'success': True,
                 'summary': {
-                    'total_bugs': total_bugs,
+                    'total': total_bugs,
                     'by_priority': priority_counts,
                     'by_state': state_counts,
                     'by_source': source_counts,
@@ -208,8 +248,8 @@ class BugTrackerQuery:
                 'error': str(e)
             }
     
-    def get_time_series_data(self, days=7):
-        """Get time series data of new bugs over time"""
+    def get_time_series_data(self, days=7, source_system=None):
+        """Get time series data of new bugs over time, optionally filtered by source system"""
         try:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
@@ -218,14 +258,24 @@ class BugTrackerQuery:
             start_date_str = start_date.isoformat()
             end_date_str = end_date.isoformat()
             
-            # Query all bugs in the time range
-            response = self.table.scan(
-                FilterExpression='createdAt BETWEEN :start_date AND :end_date',
-                ExpressionAttributeValues={
-                    ':start_date': start_date_str,
-                    ':end_date': end_date_str
-                }
-            )
+            # Query bugs in the time range, optionally filtered by source
+            if source_system:
+                response = self.table.scan(
+                    FilterExpression='createdAt BETWEEN :start_date AND :end_date AND sourceSystem = :source_system',
+                    ExpressionAttributeValues={
+                        ':start_date': start_date_str,
+                        ':end_date': end_date_str,
+                        ':source_system': source_system
+                    }
+                )
+            else:
+                response = self.table.scan(
+                    FilterExpression='createdAt BETWEEN :start_date AND :end_date',
+                    ExpressionAttributeValues={
+                        ':start_date': start_date_str,
+                        ':end_date': end_date_str
+                    }
+                )
             
             # Group by date
             bugs_by_date = {}
@@ -263,20 +313,50 @@ class BugTrackerQuery:
             }
 
 
+def get_cors_headers():
+    """Returns CORS headers for API responses"""
+    return {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+        'Content-Type': 'application/json'
+    }
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """Custom JSON encoder for DynamoDB Decimal objects"""
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            # Convert Decimal to int if it's a whole number, otherwise to float
+            if obj % 1 == 0:
+                return int(obj)
+            else:
+                return float(obj)
+        return super(DecimalEncoder, self).default(obj)
+
 def lambda_handler(event, context):
     """
     Lambda handler for BugTracker query operations
     """
     try:
-        # Parse the request
-        if 'body' in event:
+        # Parse the request - handle both API Gateway and direct invocation
+        if 'queryStringParameters' in event and event['queryStringParameters']:
+            # API Gateway GET request with query parameters
+            query_params = event['queryStringParameters']
+            query_type = query_params.get('query_type', '')
+            time_range = query_params.get('time_range')
+        elif 'body' in event and event['body']:
+            # API Gateway POST request or direct invocation with body
             body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
+            query_type = body.get('query_type', '')
+            query_params = body.get('params', {})
+            time_range = body.get('time_range')
         else:
-            body = event
-        
-        query_type = body.get('query_type', '')
-        query_params = body.get('params', {})
-        time_range = body.get('time_range')
+            # Direct invocation or empty request
+            body = event if event else {}
+            query_type = body.get('query_type', '')
+            query_params = body.get('params', {})
+            time_range = body.get('time_range')
         
         query = BugTrackerQuery()
         
@@ -285,6 +365,7 @@ def lambda_handler(event, context):
             if not ticket_id:
                 return {
                     'statusCode': 400,
+                    'headers': get_cors_headers(),
                     'body': json.dumps({
                         'error': 'Missing required parameter: ticket_id'
                     })
@@ -296,6 +377,7 @@ def lambda_handler(event, context):
             if not priority:
                 return {
                     'statusCode': 400,
+                    'headers': get_cors_headers(),
                     'body': json.dumps({
                         'error': 'Missing required parameter: priority'
                     })
@@ -307,6 +389,7 @@ def lambda_handler(event, context):
             if not state:
                 return {
                     'statusCode': 400,
+                    'headers': get_cors_headers(),
                     'body': json.dumps({
                         'error': 'Missing required parameter: state'
                     })
@@ -318,6 +401,7 @@ def lambda_handler(event, context):
             if not source_system:
                 return {
                     'statusCode': 400,
+                    'headers': get_cors_headers(),
                     'body': json.dumps({
                         'error': 'Missing required parameter: source_system'
                     })
@@ -325,15 +409,18 @@ def lambda_handler(event, context):
             result = query.get_bugs_by_source(source_system, time_range)
             
         elif query_type == 'summary':
-            result = query.get_bugs_summary(time_range)
+            source_system = query_params.get('source_system')
+            result = query.get_bugs_summary(time_range, source_system)
             
         elif query_type == 'time_series':
-            days = query_params.get('days', 7)
-            result = query.get_time_series_data(days)
+            days = int(query_params.get('days', 7))
+            source_system = query_params.get('source_system')
+            result = query.get_time_series_data(days, source_system)
             
         else:
             return {
                 'statusCode': 400,
+                'headers': get_cors_headers(),
                 'body': json.dumps({
                     'error': 'Invalid query_type. Supported types: by_ticket_id, by_priority, by_state, by_source, summary, time_series'
                 })
@@ -341,13 +428,15 @@ def lambda_handler(event, context):
         
         return {
             'statusCode': 200 if result.get('success', True) else 400,
-            'body': json.dumps(result)
+            'headers': get_cors_headers(),
+            'body': json.dumps(result, cls=DecimalEncoder)
         }
         
     except Exception as e:
         logger.error(f"Error in lambda_handler: {str(e)}")
         return {
             'statusCode': 500,
+            'headers': get_cors_headers(),
             'body': json.dumps({
                 'error': 'Internal server error',
                 'message': str(e)

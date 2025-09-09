@@ -71,14 +71,30 @@ class BugTrackerIngestion:
             raise
     
     def extract_ticket_info_from_slack(self, text):
-        """Extract ticketId and priority if available, fallback if not."""
+        """Extract ticketId, priority, status, and other fields from Slack text."""
         ticket_pattern = re.search(r"ticketId[:=]\s*(\S+)", text, re.IGNORECASE)
         priority_pattern = re.search(r"priority[:=]\s*(\S+)", text, re.IGNORECASE)
+        status_pattern = re.search(r"status[:=]\s*(\S+)", text, re.IGNORECASE)
+        state_pattern = re.search(r"state[:=]\s*(\S+)", text, re.IGNORECASE)
+        assignee_pattern = re.search(r"assignee[:=]\s*(\S+)", text, re.IGNORECASE)
+        
+        # Extract subject from first line or before first newline
+        subject = text.split('\n')[0][:100] if text else "Slack Message"
+        
+        ticket_id = ticket_pattern.group(1) if ticket_pattern else f"SL-{abs(hash(text))}"
+        priority = priority_pattern.group(1).capitalize() if priority_pattern else "Medium"
+        status = status_pattern.group(1).capitalize() if status_pattern else "Open"
+        state = state_pattern.group(1).capitalize() if state_pattern else "open"
+        assignee = assignee_pattern.group(1) if assignee_pattern else None
 
-        ticket_id = ticket_pattern.group(1) if ticket_pattern else f"SL-{hash(text)}"
-        priority = priority_pattern.group(1).capitalize() if priority_pattern else "Unknown"
-
-        return ticket_id, priority
+        return {
+            'ticket_id': ticket_id,
+            'priority': priority,
+            'status': status,
+            'state': state,
+            'subject': subject,
+            'assignee': assignee
+        }
     
     def fetch_slack_messages(self):
         """Fetch Slack messages and normalize into bug records."""
@@ -101,18 +117,22 @@ class BugTrackerIngestion:
 
             for msg in messages:
                 text = msg.get("text", "")
-                ticket_id, priority = self.extract_ticket_info_from_slack(text)
+                extracted_info = self.extract_ticket_info_from_slack(text)
                 msg_id = msg.get("ts", str(time.time()))
 
                 bug_data = {
                     "author": msg.get("user", "unknown"),
                     "text": text,
-                    "priority": priority,
+                    "priority": extracted_info['priority'],
+                    "status": extracted_info['status'],
+                    "state": extracted_info['state'],
+                    "subject": extracted_info['subject'],
+                    "assignee": extracted_info['assignee'],
                     "createdAt": datetime.fromtimestamp(float(msg["ts"])).isoformat()
                 }
                 
-                self.upsert_bug_item(ticket_id, "slack", msg_id, bug_data)
-                results.append((ticket_id, bug_data))
+                self.upsert_bug_item(extracted_info['ticket_id'], "slack", msg_id, bug_data)
+                results.append((extracted_info['ticket_id'], bug_data))
 
             logger.info(f"Processed {len(results)} Slack records")
             return results
@@ -140,16 +160,19 @@ class BugTrackerIngestion:
             results = []
 
             for t in tickets:
-                if "bug" not in (t.get("tags") or []):  # filter only bug tickets
-                    continue
+                # Include all tickets (removed restrictive 'bug' tag filter)
+                # Could filter by type instead: if t.get("type") != "incident": continue
 
                 ticket_id = f"ZD-{t['id']}"
                 bug_data = {
                     "requester": t.get("requester_id"),
                     "assignee": t.get("assignee_id"),
-                    "priority": t.get("priority", "Unknown"),
-                    "status": t.get("status", "open"),
-                    "subject": t.get("subject", ""),
+                    "priority": t.get("priority") or "Medium",  # Ensure never null
+                    "status": t.get("status") or "Open",        # Ensure never null
+                    "state": t.get("status") or "open",         # Ensure never null
+                    "subject": t.get("subject") or "Zendesk Ticket",
+                    "text": t.get("description") or "",
+                    "author": str(t.get("requester_id")) if t.get("requester_id") else "unknown",
                     "createdAt": t.get("created_at"),
                     "updatedAt": t.get("updated_at")
                 }
@@ -210,10 +233,26 @@ class BugTrackerIngestion:
                     "500009065": "Blocked"
                 }.get(workflow_state_id, f"Unknown ({workflow_state_id})")
 
+                # Extract priority from Shortcut story
+                priority = "Medium"  # Default
+                if bug.get("story_type") == "bug":
+                    priority = "High"
+                
+                # Extract assignee info
+                assignee = None
+                if bug.get("owner_ids") and len(bug["owner_ids"]) > 0:
+                    assignee = str(bug["owner_ids"][0])
+
                 bug_data = {
                     "shortcut_story_id": bug["id"],
                     "name": bug.get("name", ""),
-                    "state": status_name,
+                    "subject": bug.get("name", "Shortcut Bug"),
+                    "text": bug.get("description", ""),
+                    "priority": priority,
+                    "status": status_name,
+                    "state": status_name.lower().replace(" ", "_"),
+                    "assignee": assignee,
+                    "author": str(bug.get("requester_id", "unknown")),
                     "createdAt": bug.get("created_at"),
                     "updatedAt": bug.get("updated_at"),
                     "completed": bug.get("completed", False),

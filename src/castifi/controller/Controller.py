@@ -131,3 +131,4 @@ class Controller:
         except Exception as e:
             logger.error(f"Error linking bugs: {str(e)}")
             raise InternalServerErrorException(f"Failed to link bugs: {str(e)}")
+

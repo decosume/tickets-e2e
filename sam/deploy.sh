@@ -17,8 +17,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-STACK_NAME="BugTracker"
-ENVIRONMENT="dev"
+STACK_NAME="BugTracker-evt-bugtracker"
+ENVIRONMENT="evt-bugtracker"
 AWS_REGION="us-west-2"
 AWS_PROFILE="AdministratorAccess12hr-100142810612"
 
