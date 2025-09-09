@@ -35,3 +35,4 @@ Thumbs.db
 
 # Build artifacts
 dynamodb-policy.json
+sam/.aws-sam/

@@ -14,6 +14,70 @@ dynamodb = boto3.resource('dynamodb')
 table_name = os.environ.get('DYNAMODB_TABLE', 'BugTracker')
 table = dynamodb.Table(table_name)
 
+# Shortcut translation mappings - Real names from Shortcut API
+SHORTCUT_USER_MAPPING = {
+    "624b2310-61a8-4023-b0b8-57a0ecbe2656": "Ryan Foley",
+    "6356c7de-9fc9-4b06-aadf-1b2857238974": "Jorge Pasco", 
+    "6728fdb5-7a98-4700-abec-6f8259aa4464": "Matheus Lopes",
+    "66424177-3c6b-4160-b1c2-3c8799fe5df9": "Chris Wang",
+    "66424177-d9af-43c0-9f9c-21eb4b0d5587": "Francisco Pantoja",
+    "6668c6f1-f038-4d71-b053-e6ef337bcde6": "Javier Delgado",
+    "67c5f99f-bd86-4589-8957-808426bcbfaa": "Sierra Millard",
+    "5f20af12-be80-4d17-955a-27ae02a5d823": "Rum Sheikhani",
+    "5f178286-65b0-4adb-9d3d-b453a383c450": "Caitlin Lee",
+    "617c3d57-d301-4c63-be27-06159d6c3905": "Erica Ellingson"
+}
+
+SHORTCUT_STATUS_MAPPING = {
+    "500000027": "Ready for Dev",
+    "500000043": "In Progress", 
+    "500000385": "Code Review",
+    "500003719": "Ready for QA",
+    "500009065": "Blocked",
+    "500000028": "Released",
+    "500000380": "To Do",
+    "500008605": "Ready for Release",
+    "500000042": "Ready for Tech Design Review",
+    "500000063": "1st Refinement",
+    "500012485": "Backlog Refinement",
+    "500012489": "3rd Refinement"
+}
+
+
+def translate_shortcut_item(item):
+    """Translate Shortcut IDs to readable names for a single item"""
+    if item.get('sourceSystem') == 'shortcut':
+        # Translate assignee ID to name
+        if item.get('assignee') and item['assignee'] in SHORTCUT_USER_MAPPING:
+            item['assignee'] = SHORTCUT_USER_MAPPING[item['assignee']]
+        elif item.get('assignee') and item['assignee'] != 'Unassigned':
+            item['assignee'] = f"User {item['assignee'][:8]}"  # Show partial ID if not mapped
+            
+        # Translate status ID to name (extract ID from "Unknown (ID)" format)
+        if item.get('status') and item['status'].startswith('Unknown (') and item['status'].endswith(')'):
+            status_id = item['status'][9:-1]  # Extract ID from "Unknown (500000027)"
+            if status_id in SHORTCUT_STATUS_MAPPING:
+                item['status'] = SHORTCUT_STATUS_MAPPING[status_id]
+                
+        # Also fix the state field if it has the same format
+        if item.get('state') and '_(' in item['state']:
+            state_parts = item['state'].split('_(')
+            if len(state_parts) == 2 and state_parts[1].endswith(')'):
+                status_id = state_parts[1][:-1]
+                if status_id in SHORTCUT_STATUS_MAPPING:
+                    # Map to normalized states
+                    status_name = SHORTCUT_STATUS_MAPPING[status_id]
+                    if status_name in ['Done', 'Complete']:
+                        item['state'] = 'closed'
+                    elif status_name in ['Ready for Dev', 'To Do', 'Backlog']:
+                        item['state'] = 'open'
+                    elif status_name in ['In Progress', 'Code Review', 'Ready for QA', 'QA Testing', 'Design Review']:
+                        item['state'] = 'in_progress'
+                    elif status_name in ['Blocked']:
+                        item['state'] = 'blocked'
+                    elif status_name in ['Needs Review', 'Under Review']:
+                        item['state'] = 'pending'
+    return item
 
 class BugTrackerQuery:
     def __init__(self):
@@ -28,10 +92,15 @@ class BugTrackerQuery:
                     ':ticket_id': ticket_id
                 }
             )
+            
+            items = response.get('Items', [])
+            # Translate Shortcut items
+            items = [translate_shortcut_item(item) for item in items]
+            
             return {
                 'success': True,
                 'count': response.get('Count', 0),
-                'items': response.get('Items', [])
+                'items': items
             }
         except Exception as e:
             logger.error(f"Error querying by ticket ID: {str(e)}")
@@ -64,10 +133,18 @@ class BugTrackerQuery:
                 ExpressionAttributeValues=expression_values
             )
             
+            items = response.get('Items', [])
+            
+            # Translate Shortcut items
+            items = [translate_shortcut_item(item) for item in items]
+            
+            # Sort by creation date (newest first)
+            items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+            
             return {
                 'success': True,
                 'count': response.get('Count', 0),
-                'items': response.get('Items', []),
+                'items': items,
                 'priority': priority
             }
         except Exception as e:
@@ -103,10 +180,18 @@ class BugTrackerQuery:
                 ExpressionAttributeNames=expression_names
             )
             
+            items = response.get('Items', [])
+            
+            # Translate Shortcut items
+            items = [translate_shortcut_item(item) for item in items]
+            
+            # Sort by creation date (newest first)
+            items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+            
             return {
                 'success': True,
                 'count': response.get('Count', 0),
-                'items': response.get('Items', []),
+                'items': items,
                 'state': state
             }
         except Exception as e:
@@ -140,10 +225,18 @@ class BugTrackerQuery:
                 ExpressionAttributeValues=expression_values
             )
             
+            items = response.get('Items', [])
+            
+            # Translate Shortcut items
+            items = [translate_shortcut_item(item) for item in items]
+            
+            # Sort by creation date (newest first)
+            items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+            
             return {
                 'success': True,
                 'count': response.get('Count', 0),
-                'items': response.get('Items', []),
+                'items': items,
                 'source_system': source_system
             }
         except Exception as e:
@@ -153,6 +246,39 @@ class BugTrackerQuery:
                 'error': str(e),
                 'count': 0,
                 'items': []
+            }
+
+    def get_all_bugs(self, limit=None, order_by='newest'):
+        """Get all bugs with optional limit and ordering"""
+        try:
+            scan_kwargs = {}
+            
+            if limit:
+                scan_kwargs['Limit'] = int(limit)
+            
+            response = self.table.scan(**scan_kwargs)
+            items = response.get('Items', [])
+            
+            # Translate Shortcut items
+            items = [translate_shortcut_item(item) for item in items]
+            
+            # Sort by creation date (newest first by default)
+            if order_by == 'newest':
+                items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+            elif order_by == 'oldest':
+                items.sort(key=lambda x: x.get('createdAt', ''), reverse=False)
+            
+            return {
+                'success': True,
+                'items': items,
+                'count': len(items),
+                'total_scanned': response.get('ScannedCount', 0)
+            }
+        except Exception as e:
+            logger.error(f"Error getting all bugs: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
             }
     
     def get_bugs_summary(self, time_range=None, source_system=None):
@@ -417,12 +543,17 @@ def lambda_handler(event, context):
             source_system = query_params.get('source_system')
             result = query.get_time_series_data(days, source_system)
             
+        elif query_type == 'list':
+            limit = query_params.get('limit')
+            order_by = query_params.get('order_by', 'newest')
+            result = query.get_all_bugs(limit, order_by)
+            
         else:
             return {
                 'statusCode': 400,
                 'headers': get_cors_headers(),
                 'body': json.dumps({
-                    'error': 'Invalid query_type. Supported types: by_ticket_id, by_priority, by_state, by_source, summary, time_series'
+                    'error': 'Invalid query_type. Supported types: by_ticket_id, by_priority, by_state, by_source, summary, time_series, list'
                 })
             }
         
