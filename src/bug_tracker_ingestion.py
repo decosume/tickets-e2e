@@ -383,8 +383,17 @@ class BugTrackerIngestion:
 
                 # Extract priority from Shortcut story
                 priority = "Medium"  # Default
-                if bug.get("story_type") == "bug":
-                    priority = "High"
+                if bug.get("priority"):
+                    # Map Shortcut priority to readable names
+                    priority_mapping = {
+                        "high": "High",
+                        "medium": "Medium", 
+                        "low": "Low",
+                        "critical": "Critical"
+                    }
+                    priority = priority_mapping.get(bug.get("priority", "").lower(), bug.get("priority", "Medium"))
+                elif bug.get("story_type") == "bug":
+                    priority = "High"  # Fallback for bugs without explicit priority
                 
                 # Extract assignee info (map owner ID to name)
                 assignee = "Unassigned"
@@ -398,8 +407,9 @@ class BugTrackerIngestion:
                     "subject": bug.get("name", "Shortcut Bug"),
                     "text": bug.get("description", ""),
                     "priority": priority,
-                    "status": status_name,
+                    "status": normalized_state,  # Show state in Status column (e.g., "in_progress")
                     "state": normalized_state,
+                    "workflow_status": status_name,  # Keep the original workflow status as separate field
                     "assignee": assignee,
                     "author": str(bug.get("requester_id", "unknown")),
                     "createdAt": bug.get("created_at"),

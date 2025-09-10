@@ -1,0 +1,1 @@
+{"statusCode": 200, "body": "{\"message\": \"BugTracker ingestion completed with full state synchronization\", \"total_records\": 5200, \"slack_records\": 200, \"zendesk_records\": 5000, \"shortcut_records\": 0, \"stale_records\": 178, \"ingestion_count\": 5200, \"parameters\": {\"incremental\": false, \"source_filter\": null, \"cleanup_stale\": true}}"}
