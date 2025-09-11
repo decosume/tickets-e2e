@@ -139,9 +139,14 @@ class BugTrackerIngestion:
 
                 for msg in messages:
                     text = msg.get("text", "")
+                    
+                    # Filter: Only process messages that contain "AUTHOR" (bug report format)
+                    if "AUTHOR" not in text.upper():
+                        continue
+                    
                     extracted_info = self.extract_ticket_info_from_slack(text)
                     msg_id = msg.get("ts", str(time.time()))
-                    
+
                     # Include channel information in the ticket ID and bug data
                     channel_suffix = f"#{channel_name}"
                     ticket_id_with_channel = f"{extracted_info['ticket_id']}-{channel_id}"
@@ -160,7 +165,7 @@ class BugTrackerIngestion:
                         "sourceUpdatedAt": datetime.fromtimestamp(float(msg["ts"])).isoformat(),  # Slack messages don't change
                         "syncedAt": datetime.now().isoformat()   # Track when we synced this record
                     }
-                    
+
                     self.upsert_bug_item(ticket_id_with_channel, "slack", f"{channel_id}#{msg_id}", bug_data)
                     channel_results.append((ticket_id_with_channel, bug_data))
 
@@ -298,40 +303,22 @@ class BugTrackerIngestion:
         try:
             # First, get user mapping for owner names
             user_map = self.fetch_shortcut_users()
-            all_bugs = []
-            page_size = 25
-            next_token = None
             
-            while True:
-                # Fetch ALL bug stories regardless of completion status
-                query = "type:bug"  # Removed state restrictions for complete sync
-                
-                url = "https://api.app.shortcut.com/api/v3/search/stories"
-                headers = {"Shortcut-Token": SHORTCUT_API_TOKEN}
-                params = {"query": query, "page_size": page_size}
-                
-                if next_token:
-                    params["next"] = next_token
-                    
-                response = requests.get(url, headers=headers, params=params, timeout=10)
-                response.raise_for_status()
+            # Use the search endpoint but request full details with custom fields
+            url = "https://api.app.shortcut.com/api/v3/search/stories"
+            headers = {"Shortcut-Token": SHORTCUT_API_TOKEN}
+            params = {
+                "query": "type:bug",
+                "page_size": 100,
+                "detail": "full"  # This should include custom fields
+            }
+            
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response.raise_for_status()
 
-                data = response.json()
-                bugs = data.get("data", [])
-                
-                if not bugs:  # No more stories to fetch
-                    break
-                    
-                all_bugs.extend(bugs)
-                next_token = data.get("next")
-                
-                if not next_token:  # No more pages
-                    break
-                    
-                # Safety limit to prevent infinite loops
-                if len(all_bugs) > 1000:
-                    logger.warning("Reached story limit (1000), stopping pagination")
-                    break
+            data = response.json()
+            all_bugs = data.get("data", [])
+            logger.info(f"Fetched {len(all_bugs)} Shortcut bug stories using search endpoint")
 
             results = []
             completed_count = 0
@@ -362,10 +349,13 @@ class BugTrackerIngestion:
                     "500000028": {"name": "Done", "state": "closed"},
                     "500000380": {"name": "To Do", "state": "open"},
                     "500008605": {"name": "QA Testing", "state": "in_progress"},
-                    "500000042": {"name": "Needs Review", "state": "pending"}
+                    "500000042": {"name": "Needs Review", "state": "pending"},
+                    "500000063": {"name": "Backlog Refinement", "state": "pending"},
+                    "500012485": {"name": "3rd Refinement", "state": "pending"},
+                    "500012489": {"name": "Ready for Tech Design Review", "state": "pending"}
                 }
                 
-                workflow_info = workflow_mapping.get(workflow_state_id, {
+                workflow_info = workflow_mapping.get(str(workflow_state_id), {
                     "name": f"Unknown ({workflow_state_id})", 
                     "state": "unknown"
                 })
@@ -381,10 +371,47 @@ class BugTrackerIngestion:
                 else:
                     active_count += 1
 
-                # Extract priority from Shortcut story
-                priority = "Medium"  # Default
-                if bug.get("priority"):
-                    # Map Shortcut priority to readable names
+                # Extract priority from Shortcut custom fields
+                priority = "None"  # Default for cards without priority
+                
+                
+                # Check custom fields for priority using field_id
+                # From debug logs: '6260494c-6e8f-4f04-bcd9-255dbdff67d6' is the priority field ID
+                custom_fields = bug.get("custom_fields", [])
+                priority_field = None
+                
+                for field in custom_fields:
+                    # Look for the specific priority field ID or any field with priority-like values
+                    field_id = field.get("field_id", "")
+                    field_value = field.get("value", "")
+                    
+                    # Known priority field ID from debug logs
+                    if field_id == "6260494c-6e8f-4f04-bcd9-255dbdff67d6":
+                        priority_field = field
+                        break
+                    # Fallback: look for priority-like values in any field
+                    elif isinstance(field_value, str) and any(p in field_value.lower() for p in ["p0", "p1", "p2", "p3", "critical", "high", "medium", "low"]):
+                        priority_field = field
+                        break
+                
+                if priority_field:
+                    priority_value = priority_field.get("value", "")
+                    if isinstance(priority_value, str):
+                        # Handle formats like "P0 Critical", "P1 High", "High", "Critical"
+                        priority_lower = priority_value.lower()
+                        if "critical" in priority_lower or "p0" in priority_lower:
+                            priority = "Critical"
+                        elif "high" in priority_lower or "p1" in priority_lower:
+                            priority = "High"
+                        elif "medium" in priority_lower or "p2" in priority_lower:
+                            priority = "Medium"
+                        elif "low" in priority_lower or "p3" in priority_lower:
+                            priority = "Low"
+                        else:
+                            priority = priority_value  # Use as-is if no pattern matches
+                
+                # Fallback: check standard priority field (if it exists)
+                elif bug.get("priority"):
                     priority_mapping = {
                         "high": "High",
                         "medium": "Medium", 
@@ -393,13 +420,13 @@ class BugTrackerIngestion:
                     }
                     priority = priority_mapping.get(bug.get("priority", "").lower(), bug.get("priority", "Medium"))
                 elif bug.get("story_type") == "bug":
-                    priority = "High"  # Fallback for bugs without explicit priority
+                    priority = "High"  # Final fallback for bugs without explicit priority
                 
                 # Extract assignee info (map owner ID to name)
                 assignee = "Unassigned"
                 if bug.get("owner_ids") and len(bug["owner_ids"]) > 0:
                     owner_id = str(bug["owner_ids"][0])
-                    assignee = user_map.get(owner_id, f"User {owner_id}")
+                    assignee = user_map.get(owner_id, owner_id[:8])
 
                 bug_data = {
                     "shortcut_story_id": bug["id"],
@@ -407,7 +434,7 @@ class BugTrackerIngestion:
                     "subject": bug.get("name", "Shortcut Bug"),
                     "text": bug.get("description", ""),
                     "priority": priority,
-                    "status": normalized_state,  # Show state in Status column (e.g., "in_progress")
+                    "status": status_name,  # Show the actual workflow status name (e.g., "Ready for Dev", "In Progress")
                     "state": normalized_state,
                     "workflow_status": status_name,  # Keep the original workflow status as separate field
                     "assignee": assignee,

@@ -51,7 +51,7 @@ def translate_shortcut_item(item):
         if item.get('assignee') and item['assignee'] in SHORTCUT_USER_MAPPING:
             item['assignee'] = SHORTCUT_USER_MAPPING[item['assignee']]
         elif item.get('assignee') and item['assignee'] != 'Unassigned':
-            item['assignee'] = f"User {item['assignee'][:8]}"  # Show partial ID if not mapped
+            item['assignee'] = item['assignee'][:8]  # Show partial ID if not mapped
             
         # Translate status ID to name (extract ID from "Unknown (ID)" format)
         if item.get('status') and item['status'].startswith('Unknown (') and item['status'].endswith(')'):
@@ -251,10 +251,13 @@ class BugTrackerQuery:
     def get_all_bugs(self, limit=None, order_by='newest'):
         """Get all bugs with optional limit and ordering"""
         try:
-            scan_kwargs = {}
+            # Set a reasonable default limit to improve performance
+            if limit is None:
+                limit = 1000  # Default limit for better performance
             
-            if limit:
-                scan_kwargs['Limit'] = int(limit)
+            scan_kwargs = {
+                'Limit': int(limit)
+            }
             
             response = self.table.scan(**scan_kwargs)
             items = response.get('Items', [])
@@ -272,7 +275,8 @@ class BugTrackerQuery:
                 'success': True,
                 'items': items,
                 'count': len(items),
-                'total_scanned': response.get('ScannedCount', 0)
+                'total_scanned': response.get('ScannedCount', 0),
+                'has_more': 'LastEvaluatedKey' in response
             }
         except Exception as e:
             logger.error(f"Error getting all bugs: {str(e)}")
