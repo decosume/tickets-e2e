@@ -215,9 +215,17 @@ class BugTrackerQuery:
                 end_date = time_range.get('end_date')
                 
                 if start_date and end_date:
+                    # Convert YYYY-MM-DD format to ISO timestamp range for proper comparison
+                    # Start date: beginning of day (00:00:00)
+                    # End date: end of day (23:59:59)
+                    start_iso = f"{start_date}T00:00:00Z"
+                    end_iso = f"{end_date}T23:59:59Z"
+                    
                     key_condition += ' AND createdAt BETWEEN :start_date AND :end_date'
-                    expression_values[':start_date'] = start_date
-                    expression_values[':end_date'] = end_date
+                    expression_values[':start_date'] = start_iso
+                    expression_values[':end_date'] = end_iso
+                    
+                    logger.info(f"Date filtering: {start_date} -> {start_iso}, {end_date} -> {end_iso}")
             
             response = self.table.query(
                 IndexName='source-index',
@@ -474,13 +482,35 @@ def lambda_handler(event, context):
             # API Gateway GET request with query parameters
             query_params = event['queryStringParameters']
             query_type = query_params.get('query_type', '')
+            
+            # Handle time range - check for both old format and new separate date parameters
             time_range = query_params.get('time_range')
+            start_date = query_params.get('start_date')
+            end_date = query_params.get('end_date')
+            
+            if start_date and end_date:
+                time_range = {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+                logger.info(f"Parsed date range from query params: {start_date} to {end_date}")
         elif 'body' in event and event['body']:
             # API Gateway POST request or direct invocation with body
             body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
             query_type = body.get('query_type', '')
             query_params = body.get('params', {})
+            
+            # Handle time range for POST requests
             time_range = body.get('time_range')
+            start_date = body.get('start_date') or query_params.get('start_date')
+            end_date = body.get('end_date') or query_params.get('end_date')
+            
+            if start_date and end_date:
+                time_range = {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+                logger.info(f"Parsed date range from POST body: {start_date} to {end_date}")
         else:
             # Direct invocation or empty request
             body = event if event else {}
