@@ -581,13 +581,18 @@ def lambda_handler(event, context):
             limit = query_params.get('limit')
             order_by = query_params.get('order_by', 'newest')
             result = query.get_all_bugs(limit, order_by)
+        
+        elif query_type == 'flow_analytics':
+            # Get end-to-end flow analytics
+            analytics_handler = TicketFlowAnalytics(query)
+            result = analytics_handler.get_end_to_end_analytics(time_range)
             
         else:
             return {
                 'statusCode': 400,
                 'headers': get_cors_headers(),
                 'body': json.dumps({
-                    'error': 'Invalid query_type. Supported types: by_ticket_id, by_priority, by_state, by_source, summary, time_series, list'
+                    'error': 'Invalid query_type. Supported types: by_ticket_id, by_priority, by_state, by_source, summary, time_series, list, flow_analytics'
                 })
             }
         
@@ -606,6 +611,334 @@ def lambda_handler(event, context):
                 'error': 'Internal server error',
                 'message': str(e)
             })
+        }
+
+
+class TicketFlowAnalytics:
+    def __init__(self, bug_query):
+        self.bug_query = bug_query
+        
+    def get_end_to_end_analytics(self, time_range=None):
+        """
+        Analyze end-to-end ticket flow from origin (Zendesk/Slack) to Shortcut cards.
+        Returns insights about resolution times, connection mapping, and flow visualization data.
+        """
+        try:
+            # Get all tickets from each source
+            slack_result = self.bug_query.get_bugs_by_source('slack', time_range)
+            zendesk_result = self.bug_query.get_bugs_by_source('zendesk', time_range)
+            shortcut_result = self.bug_query.get_bugs_by_source('shortcut', time_range)
+            
+            if not all([slack_result['success'], zendesk_result['success'], shortcut_result['success']]):
+                return {'success': False, 'error': 'Failed to fetch data from all sources'}
+            
+            slack_tickets = slack_result['items']
+            zendesk_tickets = zendesk_result['items']
+            shortcut_cards = shortcut_result['items']
+            
+            # Analyze ticket connections and flows
+            flow_analysis = self._analyze_ticket_connections(slack_tickets, zendesk_tickets, shortcut_cards)
+            
+            # Calculate resolution times
+            resolution_metrics = self._calculate_resolution_metrics(slack_tickets, zendesk_tickets, shortcut_cards)
+            
+            # Generate visualization data
+            flow_visualization = self._generate_flow_visualization_data(flow_analysis, resolution_metrics)
+            
+            # Calculate source distribution and conversion rates
+            source_analytics = self._analyze_source_distribution(slack_tickets, zendesk_tickets, shortcut_cards)
+            
+            return {
+                'success': True,
+                'analytics': {
+                    'flow_analysis': flow_analysis,
+                    'resolution_metrics': resolution_metrics,
+                    'visualization_data': flow_visualization,
+                    'source_analytics': source_analytics,
+                    'summary': {
+                        'total_slack_tickets': len(slack_tickets),
+                        'total_zendesk_tickets': len(zendesk_tickets),
+                        'total_shortcut_cards': len(shortcut_cards),
+                        'connected_tickets': flow_analysis['total_connected'],
+                        'avg_resolution_time': resolution_metrics['average_resolution_hours']
+                    }
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in end-to-end analytics: {str(e)}")
+            return {'success': False, 'error': str(e)}
+    
+    def _analyze_ticket_connections(self, slack_tickets, zendesk_tickets, shortcut_cards):
+        """Analyze connections between tickets from different sources."""
+        connections = []
+        
+        # Look for Zendesk tickets that might be connected to Shortcut cards
+        zendesk_to_shortcut = []
+        for zd_ticket in zendesk_tickets:
+            zd_id = zd_ticket.get('PK', '').replace('ZD-', '')
+            
+            # Look for Shortcut cards that might reference this Zendesk ticket
+            for sc_card in shortcut_cards:
+                sc_subject = sc_card.get('subject', '').lower()
+                sc_text = sc_card.get('text', '').lower()
+                
+                # Check if Shortcut card mentions this Zendesk ticket
+                if (zd_id in sc_subject or zd_id in sc_text or 
+                    f"zd-{zd_id}" in sc_subject or f"zd-{zd_id}" in sc_text):
+                    
+                    resolution_time = self._calculate_resolution_time(
+                        zd_ticket.get('createdAt'),
+                        sc_card.get('sourceUpdatedAt') or sc_card.get('createdAt')
+                    )
+                    
+                    zendesk_to_shortcut.append({
+                        'zendesk_ticket': zd_ticket.get('PK'),
+                        'shortcut_card': sc_card.get('PK'),
+                        'connection_strength': 'direct_reference',
+                        'resolution_time_hours': resolution_time
+                    })
+        
+        # Look for Slack tickets that might be connected to Shortcut cards
+        slack_to_shortcut = []
+        for slack_ticket in slack_tickets:
+            # Check if this Slack ticket has a Zendesk ticket reference
+            slack_text = slack_ticket.get('text', '').lower()
+            if 'zendesk ticket:' in slack_text or 'zd-' in slack_text:
+                # Extract potential Zendesk ticket ID
+                import re
+                zd_match = re.search(r'zendesk ticket[:\s]*(\d+)', slack_text, re.IGNORECASE)
+                if not zd_match:
+                    zd_match = re.search(r'zd-(\d+)', slack_text, re.IGNORECASE)
+                
+                if zd_match:
+                    zd_id = zd_match.group(1)
+                    
+                    # Find corresponding Shortcut cards
+                    for sc_card in shortcut_cards:
+                        sc_subject = sc_card.get('subject', '').lower()
+                        sc_text = sc_card.get('text', '').lower()
+                        
+                        if (zd_id in sc_subject or zd_id in sc_text or 
+                            f"zd-{zd_id}" in sc_subject or f"zd-{zd_id}" in sc_text):
+                            
+                            resolution_time = self._calculate_resolution_time(
+                                slack_ticket.get('createdAt'),
+                                sc_card.get('sourceUpdatedAt') or sc_card.get('createdAt')
+                            )
+                            
+                            slack_to_shortcut.append({
+                                'slack_ticket': slack_ticket.get('PK'),
+                                'zendesk_ticket': f"ZD-{zd_id}",
+                                'shortcut_card': sc_card.get('PK'),
+                                'connection_strength': 'zendesk_linked',
+                                'resolution_time_hours': resolution_time
+                            })
+        
+        return {
+            'zendesk_to_shortcut': zendesk_to_shortcut,
+            'slack_to_shortcut': slack_to_shortcut,
+            'total_connected': len(zendesk_to_shortcut) + len(slack_to_shortcut)
+        }
+    
+    def _calculate_resolution_metrics(self, slack_tickets, zendesk_tickets, shortcut_cards):
+        """Calculate resolution time metrics for different ticket types."""
+        
+        # Calculate resolution times for completed Shortcut cards
+        completed_cards = [card for card in shortcut_cards if 
+                          card.get('status', '').lower() in ['complete', 'completed', 'done', 'released']]
+        
+        resolution_times = []
+        for card in completed_cards:
+            created_at = card.get('createdAt')
+            updated_at = card.get('sourceUpdatedAt')
+            if created_at and updated_at:
+                resolution_time = self._calculate_resolution_time(created_at, updated_at)
+                if resolution_time and resolution_time > 0:
+                    resolution_times.append(resolution_time)
+        
+        # Calculate metrics
+        if resolution_times:
+            avg_resolution = sum(resolution_times) / len(resolution_times)
+            min_resolution = min(resolution_times)
+            max_resolution = max(resolution_times)
+            resolution_times.sort()
+            median_resolution = resolution_times[len(resolution_times) // 2]
+        else:
+            avg_resolution = min_resolution = max_resolution = median_resolution = 0
+        
+        # Analyze resolution by priority
+        priority_metrics = {}
+        for priority in ['Critical', 'High', 'Medium', 'Low']:
+            priority_cards = [card for card in completed_cards if 
+                            card.get('priority', '').lower() == priority.lower()]
+            priority_times = []
+            for card in priority_cards:
+                created_at = card.get('createdAt')
+                updated_at = card.get('sourceUpdatedAt')
+                if created_at and updated_at:
+                    resolution_time = self._calculate_resolution_time(created_at, updated_at)
+                    if resolution_time and resolution_time > 0:
+                        priority_times.append(resolution_time)
+            
+            if priority_times:
+                priority_metrics[priority] = {
+                    'avg_hours': sum(priority_times) / len(priority_times),
+                    'count': len(priority_times),
+                    'min_hours': min(priority_times),
+                    'max_hours': max(priority_times)
+                }
+            else:
+                priority_metrics[priority] = {
+                    'avg_hours': 0,
+                    'count': 0,
+                    'min_hours': 0,
+                    'max_hours': 0
+                }
+        
+        return {
+            'average_resolution_hours': round(avg_resolution, 2),
+            'median_resolution_hours': round(median_resolution, 2),
+            'min_resolution_hours': round(min_resolution, 2),
+            'max_resolution_hours': round(max_resolution, 2),
+            'total_completed_cards': len(completed_cards),
+            'priority_breakdown': priority_metrics,
+            'resolution_distribution': self._get_resolution_distribution(resolution_times)
+        }
+    
+    def _calculate_resolution_time(self, created_at, completed_at):
+        """Calculate resolution time in hours between two ISO timestamps."""
+        try:
+            from datetime import datetime
+            created = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            completed = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+            delta = completed - created
+            return delta.total_seconds() / 3600  # Convert to hours
+        except Exception:
+            return None
+    
+    def _get_resolution_distribution(self, resolution_times):
+        """Get distribution of resolution times in buckets."""
+        if not resolution_times:
+            return {}
+        
+        buckets = {
+            '0-4 hours': 0,
+            '4-24 hours': 0,
+            '1-3 days': 0,
+            '3-7 days': 0,
+            '1-2 weeks': 0,
+            '2+ weeks': 0
+        }
+        
+        for time_hours in resolution_times:
+            if time_hours <= 4:
+                buckets['0-4 hours'] += 1
+            elif time_hours <= 24:
+                buckets['4-24 hours'] += 1
+            elif time_hours <= 72:
+                buckets['1-3 days'] += 1
+            elif time_hours <= 168:
+                buckets['3-7 days'] += 1
+            elif time_hours <= 336:
+                buckets['1-2 weeks'] += 1
+            else:
+                buckets['2+ weeks'] += 1
+        
+        return buckets
+    
+    def _generate_flow_visualization_data(self, flow_analysis, resolution_metrics):
+        """Generate data for flow visualization charts."""
+        
+        # Create nodes for the flow diagram
+        nodes = [
+            {'id': 'slack', 'label': 'Slack Reports', 'type': 'source', 'color': '#4A90E2'},
+            {'id': 'zendesk', 'label': 'Zendesk Tickets', 'type': 'source', 'color': '#7ED321'},
+            {'id': 'shortcut', 'label': 'Shortcut Cards', 'type': 'destination', 'color': '#F5A623'}
+        ]
+        
+        # Create edges showing connections
+        edges = []
+        
+        # Zendesk to Shortcut connections
+        zd_connections = len(flow_analysis['zendesk_to_shortcut'])
+        if zd_connections > 0:
+            avg_resolution = sum([conn['resolution_time_hours'] for conn in flow_analysis['zendesk_to_shortcut'] 
+                                if conn['resolution_time_hours']]) / zd_connections if zd_connections > 0 else 0
+            edges.append({
+                'source': 'zendesk',
+                'target': 'shortcut',
+                'value': zd_connections,
+                'label': f'{zd_connections} tickets',
+                'avg_resolution_hours': round(avg_resolution, 1)
+            })
+        
+        # Slack to Shortcut connections (via Zendesk)
+        slack_connections = len(flow_analysis['slack_to_shortcut'])
+        if slack_connections > 0:
+            avg_resolution = sum([conn['resolution_time_hours'] for conn in flow_analysis['slack_to_shortcut'] 
+                                if conn['resolution_time_hours']]) / slack_connections if slack_connections > 0 else 0
+            edges.append({
+                'source': 'slack',
+                'target': 'shortcut',
+                'value': slack_connections,
+                'label': f'{slack_connections} tickets',
+                'avg_resolution_hours': round(avg_resolution, 1)
+            })
+        
+        return {
+            'nodes': nodes,
+            'edges': edges,
+            'flow_summary': {
+                'total_flows': len(edges),
+                'total_connected_tickets': sum([edge['value'] for edge in edges])
+            }
+        }
+    
+    def _analyze_source_distribution(self, slack_tickets, zendesk_tickets, shortcut_cards):
+        """Analyze distribution and conversion rates by source."""
+        
+        total_tickets = len(slack_tickets) + len(zendesk_tickets)
+        
+        # Status distribution
+        status_distribution = {}
+        
+        # Analyze Shortcut card statuses
+        for card in shortcut_cards:
+            status = card.get('status', 'Unknown')
+            if status not in status_distribution:
+                status_distribution[status] = 0
+            status_distribution[status] += 1
+        
+        # Priority distribution across all sources
+        priority_distribution = {'Critical': 0, 'High': 0, 'Medium': 0, 'Low': 0, 'Unknown': 0}
+        
+        all_tickets = slack_tickets + zendesk_tickets + shortcut_cards
+        for ticket in all_tickets:
+            priority = ticket.get('priority', 'Unknown')
+            if priority.lower() == 'normal':
+                priority = 'Medium'
+            elif priority.lower() in ['none', '']:
+                priority = 'Unknown'
+            
+            if priority in priority_distribution:
+                priority_distribution[priority] += 1
+            else:
+                priority_distribution['Unknown'] += 1
+        
+        return {
+            'source_counts': {
+                'slack': len(slack_tickets),
+                'zendesk': len(zendesk_tickets),
+                'shortcut': len(shortcut_cards)
+            },
+            'status_distribution': status_distribution,
+            'priority_distribution': priority_distribution,
+            'conversion_rate': {
+                'tickets_to_cards': len(shortcut_cards) / total_tickets if total_tickets > 0 else 0,
+                'total_input_tickets': total_tickets,
+                'total_output_cards': len(shortcut_cards)
+            }
         }
 
 
