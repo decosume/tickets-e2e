@@ -72,8 +72,16 @@ class BugTrackerIngestion:
     
     def extract_ticket_info_from_slack(self, text):
         """Extract ticketId, priority, status, and other fields from Slack text."""
+        # Look for various ticket ID patterns
         ticket_pattern = re.search(r"ticketId[:=]\s*(\S+)", text, re.IGNORECASE)
+        
+        # NEW: Look for Zendesk Ticket field (takes priority over ticketId)
+        zendesk_ticket_pattern = re.search(r"zendesk\s*ticket[:=]\s*(\S+)", text, re.IGNORECASE)
+        
+        # Look for priority patterns (support both old and new formats)
         priority_pattern = re.search(r"priority[:=]\s*(\S+)", text, re.IGNORECASE)
+        
+        # Other existing patterns
         status_pattern = re.search(r"status[:=]\s*(\S+)", text, re.IGNORECASE)
         state_pattern = re.search(r"state[:=]\s*(\S+)", text, re.IGNORECASE)
         assignee_pattern = re.search(r"assignee[:=]\s*(\S+)", text, re.IGNORECASE)
@@ -81,7 +89,17 @@ class BugTrackerIngestion:
         # Extract subject from first line or before first newline
         subject = text.split('\n')[0][:100] if text else "Slack Message"
         
-        ticket_id = ticket_pattern.group(1) if ticket_pattern else f"SL-{abs(hash(text))}"
+        # Determine ticket ID: Zendesk Ticket takes priority, then ticketId, then generate one
+        if zendesk_ticket_pattern:
+            ticket_id = zendesk_ticket_pattern.group(1)
+            # If it doesn't start with ZD-, add the prefix
+            if not ticket_id.upper().startswith('ZD-'):
+                ticket_id = f"ZD-{ticket_id}"
+        elif ticket_pattern:
+            ticket_id = ticket_pattern.group(1)
+        else:
+            ticket_id = f"SL-{abs(hash(text))}"
+        
         priority = priority_pattern.group(1).capitalize() if priority_pattern else "Medium"
         status = status_pattern.group(1).capitalize() if status_pattern else "Open"
         state = state_pattern.group(1).capitalize() if state_pattern else "open"
