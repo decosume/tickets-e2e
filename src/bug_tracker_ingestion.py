@@ -4,6 +4,7 @@ import boto3
 import json
 import time
 import logging
+import hashlib
 from datetime import datetime
 import requests
 
@@ -98,7 +99,9 @@ class BugTrackerIngestion:
         elif ticket_pattern:
             ticket_id = ticket_pattern.group(1)
         else:
-            ticket_id = f"SL-{abs(hash(text))}"
+            # Use deterministic hash to prevent duplicates across ingestion runs
+            text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()[:12]
+            ticket_id = f"SL-{text_hash}"
         
         priority = priority_pattern.group(1).capitalize() if priority_pattern else "Medium"
         status = status_pattern.group(1).capitalize() if status_pattern else "Open"

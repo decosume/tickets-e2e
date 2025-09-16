@@ -1,0 +1,399 @@
+/* Real-time updates visual effects and animations */
+
+/* Connection status indicator */
+.connection-status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.connection-status.connected {
+    background: #4CAF50;
+    color: white;
+}
+
+.connection-status.connected::before {
+    content: "🟢 ";
+}
+
+.connection-status.disconnected {
+    background: #f44336;
+    color: white;
+}
+
+.connection-status.disconnected::before {
+    content: "🔴 ";
+}
+
+.connection-status.connecting {
+    background: #ff9800;
+    color: white;
+}
+
+.connection-status.connecting::before {
+    content: "🟡 ";
+}
+
+/* Live update animations */
+.new-bug-highlight {
+    animation: newBugPulse 3s ease-in-out;
+    background: linear-gradient(90deg, #e8f5e8, transparent);
+}
+
+.updated-bug-highlight {
+    animation: updatedBugPulse 2s ease-in-out;
+    background: linear-gradient(90deg, #fff3cd, transparent);
+}
+
+.resolved-bug {
+    animation: resolvedBugFade 1s ease-out forwards;
+}
+
+@keyframes newBugPulse {
+    0% { 
+        background: #4CAF50;
+        transform: scale(1.02);
+    }
+    50% { 
+        background: #e8f5e8;
+        transform: scale(1.01);
+    }
+    100% { 
+        background: transparent;
+        transform: scale(1);
+    }
+}
+
+@keyframes updatedBugPulse {
+    0% { 
+        background: #ff9800;
+        transform: translateX(5px);
+    }
+    50% { 
+        background: #fff3cd;
+        transform: translateX(0);
+    }
+    100% { 
+        background: transparent;
+        transform: translateX(0);
+    }
+}
+
+@keyframes resolvedBugFade {
+    0% { 
+        opacity: 1;
+        background: #4CAF50;
+    }
+    50% { 
+        opacity: 0.7;
+        background: #e8f5e8;
+    }
+    100% { 
+        opacity: 0.3;
+        background: transparent;
+        text-decoration: line-through;
+    }
+}
+
+/* Statistics counters animation */
+.stat-value {
+    transition: all 0.3s ease;
+}
+
+.stat-updated {
+    animation: statBounce 0.6s ease;
+    color: #4CAF50 !important;
+    font-weight: bold;
+}
+
+@keyframes statBounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* Toast notifications */
+.notifications-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+    max-width: 400px;
+}
+
+.notification.toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: slideInRight 0.3s ease-out;
+    backdrop-filter: blur(10px);
+    border-left: 4px solid;
+}
+
+.notification.info {
+    background: rgba(33, 150, 243, 0.9);
+    border-left-color: #2196F3;
+    color: white;
+}
+
+.notification.success {
+    background: rgba(76, 175, 80, 0.9);
+    border-left-color: #4CAF50;
+    color: white;
+}
+
+.notification.warning {
+    background: rgba(255, 152, 0, 0.9);
+    border-left-color: #ff9800;
+    color: white;
+}
+
+.notification.error {
+    background: rgba(244, 67, 54, 0.9);
+    border-left-color: #f44336;
+    color: white;
+}
+
+.notification-content strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+}
+
+.notification-content p {
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 10px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.close-btn:hover {
+    opacity: 1;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Live activity indicator */
+.live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: #e8f5e8;
+    border: 1px solid #4CAF50;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #2e7d32;
+    font-weight: 500;
+}
+
+.live-indicator::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    background: #4CAF50;
+    border-radius: 50%;
+    animation: livePulse 2s infinite;
+}
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Realtime charts updates */
+.chart-updating {
+    position: relative;
+}
+
+.chart-updating::after {
+    content: "Updating...";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(33, 150, 243, 0.9);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    animation: fadeInOut 2s ease-in-out;
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+}
+
+/* Source badges with realtime styling */
+.source-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+}
+
+.source-badge.slack {
+    background: #4A154B;
+    color: white;
+}
+
+.source-badge.zendesk {
+    background: #03363D;
+    color: white;
+}
+
+.source-badge.shortcut {
+    background: #0052CC;
+    color: white;
+}
+
+/* Priority badges with realtime effects */
+.priority-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+}
+
+.priority-badge.critical {
+    background: #cf1322;
+    color: white;
+    animation: criticalPulse 2s infinite;
+}
+
+.priority-badge.high {
+    background: #ff4d4f;
+    color: white;
+}
+
+.priority-badge.medium {
+    background: #faad14;
+    color: #000;
+}
+
+.priority-badge.low {
+    background: #52c41a;
+    color: white;
+}
+
+@keyframes criticalPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); box-shadow: 0 0 10px rgba(207, 19, 34, 0.5); }
+}
+
+/* Status badges */
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.status-badge.open {
+    background: #e6f7ff;
+    color: #0050b3;
+    border: 1px solid #91d5ff;
+}
+
+.status-badge.in-progress {
+    background: #fff7e6;
+    color: #d46b08;
+    border: 1px solid #ffd591;
+}
+
+.status-badge.resolved {
+    background: #f6ffed;
+    color: #389e0d;
+    border: 1px solid #b7eb8f;
+}
+
+.status-badge.closed {
+    background: #f5f5f5;
+    color: #595959;
+    border: 1px solid #d9d9d9;
+}
+
+/* Table row hover effects with realtime data */
+.bug-list tbody tr {
+    transition: all 0.2s ease;
+}
+
+.bug-list tbody tr:hover {
+    background: #f9f9f9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading states for realtime updates */
+.loading-skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .notifications-container {
+        left: 10px;
+        right: 10px;
+        max-width: none;
+    }
+    
+    .connection-status {
+        top: 5px;
+        right: 5px;
+        font-size: 10px;
+        padding: 6px 10px;
+    }
+    
+    .notification.toast {
+        padding: 10px 12px;
+    }
+    
+    .notification-content strong {
+        font-size: 13px;
+    }
+    
+    .notification-content p {
+        font-size: 11px;
+    }
+}
