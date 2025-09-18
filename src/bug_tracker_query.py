@@ -47,11 +47,35 @@ SHORTCUT_STATUS_MAPPING = {
 def translate_shortcut_item(item):
     """Translate Shortcut IDs to readable names for a single item"""
     if item.get('sourceSystem') == 'shortcut':
-        # Translate assignee ID to name
-        if item.get('assignee') and item['assignee'] in SHORTCUT_USER_MAPPING:
-            item['assignee'] = SHORTCUT_USER_MAPPING[item['assignee']]
-        elif item.get('assignee') and item['assignee'] != 'Unassigned':
-            item['assignee'] = item['assignee'][:8]  # Show partial ID if not mapped
+        # Translate assignee ID to name - handle both string and list formats
+        assignee = item.get('assignee')
+        if assignee:
+            if isinstance(assignee, list) and len(assignee) > 0:
+                # If assignee is a list, take the first element and convert to string
+                assignee = assignee[0]
+                item['assignee'] = assignee  # Store as string
+            
+            if isinstance(assignee, str):
+                if assignee in SHORTCUT_USER_MAPPING:
+                    item['assignee'] = SHORTCUT_USER_MAPPING[assignee]
+                elif assignee != 'Unassigned':
+                    item['assignee'] = assignee[:8]  # Show partial ID if not mapped
+        
+        # Handle tags field - ensure it's always a list
+        tags = item.get('tags')
+        if tags is None:
+            item['tags'] = []
+        elif not isinstance(tags, list):
+            item['tags'] = [tags] if tags else []
+        
+        # Ensure all other fields are not lists to prevent sorting issues
+        for key, value in item.items():
+            if isinstance(value, list) and key not in ['tags']:
+                # Convert other list fields to strings (take first element)
+                if len(value) > 0:
+                    item[key] = str(value[0])
+                else:
+                    item[key] = ''
             
         # Translate status ID to name (extract ID from "Unknown (ID)" format)
         if item.get('status') and item['status'].startswith('Unknown (') and item['status'].endswith(')'):
