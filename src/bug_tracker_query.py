@@ -973,6 +973,16 @@ class TicketFlowAnalytics:
                 }
             }
     
+    def _map_channel_id_to_name(self, channel_id):
+        """Map Slack channel ID to actual channel name"""
+        channel_mapping = {
+            'C0921KTEKNG': 'urgent-casting-platform',
+            'C08LHAYC9L5': 'urgent-casting', 
+            'C01AAB3S8TU': 'product-vouchers',
+            'C08LC7Q97FY': 'urgent-vouchers'
+        }
+        return f"#{channel_mapping.get(channel_id, f'channel-{channel_id[:8]}')}"
+
     def _extract_real_owners_and_channels(self, slack_tickets, zendesk_tickets, shortcut_cards):
         """Extract real owner names and channel names from actual ticket data."""
         
@@ -993,13 +1003,12 @@ class TicketFlowAnalytics:
                 if not clean_owner.startswith(('<@', 'U0', 'ID:')):
                     owners.add(clean_owner)
             
-            # Get channel name
-            channel = ticket.get('channel', '').strip()
-            if channel and channel != 'unknown-channel':
-                # Ensure channel starts with #
-                if not channel.startswith('#'):
-                    channel = f"#{channel}"
-                channels.add(channel)
+            # Get channel ID and map to channel name
+            channel_id = ticket.get('channel', '').strip()
+            if channel_id and channel_id != 'unknown-channel':
+                # Map channel ID to actual channel name
+                channel_name = self._map_channel_id_to_name(channel_id)
+                channels.add(channel_name)
         
         # Extract from Zendesk tickets
         for ticket in zendesk_tickets:
@@ -1024,6 +1033,11 @@ class TicketFlowAnalytics:
                 if '@' in clean_owner:
                     clean_owner = clean_owner.split('@')[0].replace('.', ' ').title()
                 owners.add(clean_owner)
+            
+            # Also extract team information if available
+            team = card.get('team')
+            if team and team.strip():
+                owners.add(team.strip())
         
         # Convert to sorted lists and limit to reasonable numbers
         real_owners = sorted(list(owners))[:10]  # Top 10 most active owners

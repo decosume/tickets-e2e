@@ -210,14 +210,12 @@ class BugTrackerIngestion:
         
         try:
             all_tickets = []
-            page_num = 1
+            next_page_url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets.json?per_page=100&sort_by=created_at&sort_order=desc"
             
-            while True:
-                # Fetch ALL tickets regardless of status for complete sync
-                # Use pagination to handle large datasets
-                url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets.json?page={page_num}&per_page=100"
+            while next_page_url:
+                # Use cursor-based pagination (next_page) instead of page numbers
                 auth = (f"{ZENDESK_EMAIL}/token", ZENDESK_API_TOKEN)
-                response = requests.get(url, auth=auth, timeout=10)
+                response = requests.get(next_page_url, auth=auth, timeout=10)
                 response.raise_for_status()
 
                 data = response.json()
@@ -227,11 +225,14 @@ class BugTrackerIngestion:
                     break
                     
                 all_tickets.extend(tickets)
-                page_num += 1
+                logger.info(f"Fetched {len(tickets)} tickets, total so far: {len(all_tickets)} - Using cursor-based pagination")
+                
+                # Get next page URL from response (cursor-based pagination)
+                next_page_url = data.get("next_page")
                 
                 # Safety limit to prevent infinite loops
-                if page_num > 50:
-                    logger.warning("Reached page limit (50), stopping pagination")
+                if len(all_tickets) > 15000:  # Reasonable limit for all tickets
+                    logger.warning(f"Reached ticket limit ({len(all_tickets)}), stopping pagination")
                     break
 
             results = []
